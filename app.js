@@ -27,27 +27,63 @@
     plane: '<path d="M10.5 13.5L3 11l1.5-1.5 7.5.5 4.5-4.5a2 2 0 013 3L15 13l.5 7.5L14 22l-2.5-7.5z"/>',
     moon: '<path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/>',
     coffee: '<path d="M4 9h13v5a5 5 0 01-5 5H9a5 5 0 01-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 010 5H17M8 3v3M12 3v3"/>',
+    star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
+    quiz: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 015 .9c0 1.7-2.5 2.2-2.5 3.9M12 17h.01"/>',
+    chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    flame: '<path d="M12 22c4 0 7-2.8 7-6.8 0-3.2-2-5.7-4-7.7.2 2-1 3.5-2.2 3.5C11 11 12 7 9.5 3 9.4 6.6 5 9.6 5 15.2 5 19.2 8 22 12 22z"/>',
     share: '<path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/>'
   };
   const svg = (n) => `<svg viewBox="0 0 24 24" aria-hidden="true">${I[n] || ''}</svg>`;
 
   /* ---------------- storage (Telegram CloudStorage + local fallback) ---------------- */
   const KEY = 'huna_state_v1';
-  const state = { done: {}, theme: 'auto', scale: 1, harakat: true, fcChapter: 'all', fcMode: 'new', cards: {} };
+  const state = { done: {}, theme: 'auto', scale: 1, harakat: true, fcChapter: 'all', fcMode: 'new', cards: {}, fav: {}, favD: {}, quiz: {}, days: [], qDir: 'ar' };
   function loadLocal() { try { Object.assign(state, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {} }
+  const cloudOk = () => { try { return !!(tg && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9')); } catch (e) { return false; } };
+  const CHUNK = 3800;
+  let saveT = null;
   function save() {
     const s = JSON.stringify(state);
     try { localStorage.setItem(KEY, s); } catch (e) {}
-    try { if (tg && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9')) tg.CloudStorage.setItem(KEY, s, () => {}); } catch (e) {}
+    if (!cloudOk()) return;
+    clearTimeout(saveT);
+    saveT = setTimeout(() => {
+      try {
+        const parts = []; for (let i = 0; i < s.length; i += CHUNK) parts.push(s.slice(i, i + CHUNK));
+        parts.forEach((p, i) => tg.CloudStorage.setItem(KEY + '_' + i, p, () => {}));
+        tg.CloudStorage.setItem(KEY + '_n', String(parts.length), () => {});
+      } catch (e) {}
+    }, 600);
   }
   function loadCloud(cb) {
+    if (!cloudOk()) return cb();
+    let done = false; const fin = () => { if (!done) { done = true; cb(); } };
+    setTimeout(fin, 2500);
     try {
-      if (tg && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9')) {
-        tg.CloudStorage.getItem(KEY, (err, v) => { if (!err && v) { try { Object.assign(state, JSON.parse(v)); } catch (e) {} } cb(); });
-        return;
-      }
-    } catch (e) {}
-    cb();
+      tg.CloudStorage.getItem(KEY + '_n', (err, n) => {
+        n = Number(n);
+        if (err || !n) {
+          tg.CloudStorage.getItem(KEY, (e2, v) => { if (!e2 && v) { try { Object.assign(state, JSON.parse(v)); } catch (x) {} } fin(); });
+          return;
+        }
+        const keys = Array.from({ length: n }, (_, i) => KEY + '_' + i);
+        tg.CloudStorage.getItems(keys, (e3, vals) => {
+          if (!e3 && vals) { try { Object.assign(state, JSON.parse(keys.map(k => vals[k] || '').join(''))); } catch (x) {} }
+          fin();
+        });
+      });
+    } catch (e) { fin(); }
+  }
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  function markActive() {
+    const t = today(); state.days = state.days || [];
+    if (state.days[state.days.length - 1] !== t) { state.days.push(t); if (state.days.length > 400) state.days = state.days.slice(-400); save(); }
+  }
+  function streak() {
+    const set = new Set(state.days || []); let n = 0; const d = new Date();
+    if (!set.has(today())) d.setDate(d.getDate() - 1);
+    for (;;) { const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; if (!set.has(k)) break; n++; d.setDate(d.getDate() - 1); }
+    return n;
   }
 
   /* ---------------- helpers ---------------- */
@@ -75,6 +111,9 @@
     const end = ds[i + 1] ? ds[i + 1].page : Infinity;
     return labeledSections(ch).filter(s => s.page > d.page && s.page < end && s.type !== 'prac');
   }
+  const isFav = (a) => !!state.fav[vkey(a)];
+  const starBtn = (a) => `<button class="star ${isFav(a) ? 'on' : ''}" data-fav="${esc(vkey(a))}" aria-label="В избранное">${svg('star')}</button>`;
+  const vrow = (a, r) => `<tr><td class="ru"><div class="rucell">${starBtn(a)}<span>${esc(r)}</span></div></td><td class="ar">${esc(ar(a))}</td></tr>`;
   const matRow = (s) => `<button class="mat" data-p="${s.page}" data-t="${esc(s.label)}"><span>${esc(s.label)}</span><small>стр. ${s.page}</small>${svg('right')}</button>`;
   const pageSrc = (n) => `${n}.webp`;
   const haptic = (t = 'light') => { try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
@@ -99,9 +138,9 @@
   const TABS = [
     { id: 'home', label: book.title, icon: 'home' },
     { id: 'dict', label: 'Словарь', icon: 'dict' },
-    { id: 'cards', label: 'Карточки', icon: 'cards' },
+    { id: 'cards', label: 'Практика', icon: 'cards' },
     { id: 'book', label: 'Книга', icon: 'book' },
-    { id: 'settings', label: 'Настройки', icon: 'settings' }
+    { id: 'settings', label: 'Прогресс', icon: 'chart' }
   ];
   function renderTabs(active) {
     $('#tabbar').innerHTML = TABS.map(t => `<button class="tab ${t.id === active ? 'active' : ''}" data-tab="${t.id}">${svg(t.icon)}<span>${esc(t.label)}</span></button>`).join('');
@@ -126,11 +165,13 @@
     const h = location.hash.replace(/^#\/?/, '');
     const [name, arg] = h.split('/');
     window.scrollTo(0, 0);
+    $('#toast').classList.remove('show');
     if (name === 'd' && arg) return renderDialogue(decodeURIComponent(arg));
     if (name === 'p' && arg) return renderPages(arg.split(',').map(Number), decodeURIComponent(h.split('/')[2] || ''));
     if (name === 'w' && arg) return renderWords(Number(arg));
     if (name === 'dict') return renderDict();
     if (name === 'cards') return renderCards();
+    if (name === 'quiz') return renderQuiz(arg || 'all');
     if (name === 'book') return renderBook(Number(arg) || 1);
     if (name === 'settings') return renderSettings();
     renderHome();
@@ -157,7 +198,7 @@
         const first = d.lines && d.lines[0] ? `<div class="first">${esc(ar(d.lines[0][1]))}</div>` : '';
         return `<button class="dcard" data-d="${d.id}">
           <span class="pill">${ch.n}.${d.n}. Диалог</span>
-          ${state.done[d.id] ? `<span class="done">${svg('check')}</span>` : ''}
+          ${state.done[d.id] ? `<span class="done">${svg('check')}</span>` : ''}${state.favD[d.id] ? `<span class="favmark">${svg('star')}</span>` : ''}
           ${first}
           <div class="sub">${esc(d.ru || ar(d.ar))}</div>
         </button>`;
@@ -167,6 +208,7 @@
       const nW = chapterVocab(ch).length;
       const tools = `<div class="ch-tools">
           ${nW ? `<button class="tool" data-w="${ch.n}">${svg('dict')}<span>Слова главы<small>${nW} слов</small></span></button>` : ''}
+          ${nW ? `<button class="tool" data-quiz="${ch.n}">${svg('quiz')}<span>Тест${state.quiz[ch.n] != null ? `<small>лучший ${state.quiz[ch.n]}%</small>` : '<small>10 вопросов</small>'}</span></button>` : ''}
           <button class="tool" data-mat="${ch.n}" aria-expanded="false">${svg('page')}<span>Материалы<small>${secs.length} разделов</small></span></button>
         </div>
         <div class="mats" id="mats-${ch.n}" hidden>${secs.map(matRow).join('')}</div>`;
@@ -197,6 +239,7 @@
     });
     view.onclick = e => {
       const d = e.target.closest('[data-d]'); if (d) { haptic(); location.hash = '#/d/' + d.dataset.d; return; }
+      const qz = e.target.closest('[data-quiz]'); if (qz) { haptic(); location.hash = '#/quiz/' + qz.dataset.quiz; return; }
       const m = e.target.closest('[data-mat]');
       if (m) { haptic(); const box = $('#mats-' + m.dataset.mat); box.hidden = !box.hidden; m.setAttribute('aria-expanded', String(!box.hidden)); m.classList.toggle('open', !box.hidden); return; }
       const w = e.target.closest('[data-w]'); if (w) { haptic(); location.hash = '#/w/' + w.dataset.w; return; }
@@ -228,7 +271,7 @@
         }).join('')}</div>`;
       } else if (cur === 'vocab') {
         body = `<table class="vocab"><thead><tr><th>Значение</th><th class="ar">الكَلِمة الجَدِيدة</th></tr></thead><tbody>${
-          d.vocab.map(v => `<tr><td class="ru">${esc(v[1])}</td><td class="ar">${esc(ar(v[0]))}</td></tr>`).join('')}</tbody></table>`;
+          d.vocab.map(v => vrow(v[0], v[1])).join('')}</tbody></table>`;
       } else {
         const pages = [d.page].concat(d.explain ? [d.explain] : []);
         body = pages.map(p => `<img class="page-img" loading="lazy" src="${pageSrc(p)}" alt="Страница ${p} учебника">`).join('');
@@ -237,7 +280,8 @@
       const mats = dialogueMaterials(d);
       const list = allDialogues(); const i = list.findIndex(x => x.id === d.id); const next = list[i + 1];
       view.innerHTML = `
-        <div class="dhead"><span class="ar">${esc(ar(d.ar))}</span>${d.ru ? `<span class="ru">${esc(d.ru)}</span>` : ''}</div>
+        <div class="dhead"><span class="ar">${esc(ar(d.ar))}</span>${d.ru ? `<span class="ru">${esc(d.ru)}</span>` : ''}
+          <button class="dstar ${state.favD[d.id] ? 'on' : ''}" id="favD">${svg('star')}${state.favD[d.id] ? 'В избранном' : 'В избранное'}</button></div>
         ${tabs.length > 1 ? `<div class="seg">${tabs.map(t => `<button data-seg="${t[0]}" class="${t[0] === cur ? 'on' : ''}">${t[1]}</button>`).join('')}</div>` : ''}
         ${body}
         ${mats.length ? `<div class="h2">К этому диалогу</div><div class="mats">${mats.map(matRow).join('')}</div>` : ''}
@@ -247,6 +291,7 @@
         </div>`;
       view.onclick = e => {
         const s = e.target.closest('[data-seg]'); if (s) { haptic(); cur = s.dataset.seg; draw(); return; }
+        if (e.target.closest('#favD')) { haptic(); if (state.favD[d.id]) delete state.favD[d.id]; else state.favD[d.id] = 1; save(); draw(); return; }
         if (e.target.closest('#doneBtn')) {
           state.done[d.id] = !state.done[d.id]; if (!state.done[d.id]) delete state.done[d.id];
           save(); haptic('medium'); toast(state.done[d.id] ? 'Диалог отмечен' : 'Отметка снята'); draw(); return;
@@ -305,11 +350,13 @@
     const list = chapterVocab(ch);
     view.innerHTML = `<div class="dhead"><span class="ar">${esc(ar(ch.ar))}</span><span class="ru">${esc(ch.ru)} · ${list.length} слов</span></div>
       <table class="vocab"><thead><tr><th>Значение</th><th class="ar">الكَلِمة الجَدِيدة</th></tr></thead><tbody>${
-      list.map(v => `<tr><td class="ru">${esc(v.ru)}</td><td class="ar">${esc(ar(v.ar))}</td></tr>`).join('')}</tbody></table>
-      <div class="row2"><button class="btn" id="learn">${svg('cards')}Учить карточками</button><button class="btn ghost" id="src">${svg('page')}В книге</button></div>`;
+      list.map(v => vrow(v.ar, v.ru)).join('')}</tbody></table>
+      <div class="row2"><button class="btn" id="learn">${svg('cards')}Карточки</button><button class="btn" id="qz">${svg('quiz')}Тест</button></div>
+      <button class="btn ghost" id="src">${svg('page')}Словарь в книге</button>`;
     view.onclick = e => {
       if (e.target.closest('#learn')) { state.fcChapter = String(n); save(); location.hash = '#/cards'; }
       if (e.target.closest('#src')) location.hash = '#/book/' + ch.dictPage;
+      if (e.target.closest('#qz')) location.hash = '#/quiz/' + n;
     };
   }
 
@@ -322,7 +369,7 @@
       const nq = norm(q.trim());
       const list = nq ? words.filter(w => norm(w.ar).includes(nq) || norm(w.ru).includes(nq)) : words;
       $('#dres').innerHTML = list.length
-        ? `<table class="vocab"><thead><tr><th>Значение</th><th class="ar">الكَلِمة</th></tr></thead><tbody>${list.map(v => `<tr><td class="ru">${esc(v.ru)}</td><td class="ar">${esc(ar(v.ar))}</td></tr>`).join('')}</tbody></table>`
+        ? `<table class="vocab"><thead><tr><th>Значение</th><th class="ar">الكَلِمة</th></tr></thead><tbody>${list.map(v => vrow(v.ar, v.ru)).join('')}</tbody></table>`
         : `<div class="empty">Ничего не найдено. Попробуйте другое слово или посмотрите словарь из книги ниже.</div>`;
     };
     view.innerHTML = `
@@ -337,18 +384,19 @@
 
   /* ---------------- flashcards ---------------- */
   function renderCards() {
-    setChrome('Карточки', 'cards', false);
+    setChrome('Практика', 'cards', false);
     const chs = book.chapters.filter(c => chapterVocab(c).length);
     const pool = allVocab().filter(v => state.fcChapter === 'all' || String(v.ch) === String(state.fcChapter));
     const st = (v) => state.cards[vkey(v.ar)];
     let counts;
-    const recount = () => { counts = { new: pool.filter(v => st(v) !== 'known').length, hard: pool.filter(v => st(v) === 'hard').length, all: pool.length, known: pool.filter(v => st(v) === 'known').length }; };
+    const recount = () => { counts = { fav: pool.filter(v => isFav(v.ar)).length, new: pool.filter(v => st(v) !== 'known').length, hard: pool.filter(v => st(v) === 'hard').length, all: pool.length, known: pool.filter(v => st(v) === 'known').length }; };
     recount();
     const mode = state.fcMode || 'new';
-    let deck = pool.filter(v => mode === 'all' ? true : mode === 'hard' ? st(v) === 'hard' : st(v) !== 'known');
+    let deck = pool.filter(v => mode === 'all' ? true : mode === 'hard' ? st(v) === 'hard' : mode === 'fav' ? isFav(v.ar) : st(v) !== 'known');
     deck = deck.sort(() => Math.random() - .5);
     let i = 0, learned = 0;
     const head = () => `
+      <div class="seg top"><button class="on">Карточки</button><button id="toQuiz">Тест</button></div>
       <select class="select" id="fch">
         <option value="all">Все главы</option>
         ${chs.map(c => `<option value="${c.n}" ${String(state.fcChapter) === String(c.n) ? 'selected' : ''}>Глава ${c.n}. ${esc(c.ru)}</option>`).join('')}
@@ -356,17 +404,19 @@
       <div class="seg">
         <button data-mode="new" class="${mode === 'new' ? 'on' : ''}">Не выучено · ${counts.new}</button>
         <button data-mode="hard" class="${mode === 'hard' ? 'on' : ''}">Сложные · ${counts.hard}</button>
+        <button data-mode="fav" class="${mode === 'fav' ? 'on' : ''}">★ · ${counts.fav}</button>
         <button data-mode="all" class="${mode === 'all' ? 'on' : ''}">Все · ${counts.all}</button>
       </div>
       <div class="progress fc-prog"><i style="width:${counts.all ? Math.round(counts.known / counts.all * 100) : 0}%"></i></div>
       <div class="fc-meta">Выучено ${counts.known} из ${counts.all}</div>`;
     const bind = () => {
       $('#fch').onchange = e => { state.fcChapter = e.target.value; save(); renderCards(); };
+      $('#toQuiz').onclick = () => { haptic(); location.hash = '#/quiz/' + (state.fcChapter || 'all'); };
       view.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { haptic(); state.fcMode = b.dataset.mode; save(); renderCards(); });
     };
     const draw = () => {
       if (!deck.length) {
-        const msg = mode === 'hard' ? 'Сложных слов нет. Слова попадают сюда, когда вы нажимаете «Повторить».'
+        const msg = mode === 'fav' ? 'Здесь будут слова, отмеченные звёздочкой в словаре или на карточке.' : mode === 'hard' ? 'Сложных слов нет. Слова попадают сюда, когда вы нажимаете «Повторить».'
           : mode === 'new' ? 'Все слова выучены. Откройте «Все», чтобы повторить их ещё раз.' : 'В этой главе пока нет слов.';
         view.innerHTML = head() + `<div class="empty">${msg}</div>`; bind(); return;
       }
@@ -378,7 +428,7 @@
       view.innerHTML = head() + `
         <div class="fc-meta">${i + 1} / ${deck.length}${s === 'hard' ? ' · сложное' : s === 'known' ? ' · выучено' : ''}</div>
         <div class="fc-wrap"><div class="fc" id="fc">
-          <div class="front"><div class="ar">${esc(ar(v.ar))}</div><small>Нажмите, чтобы перевернуть</small></div>
+          <div class="front">${starBtn(v.ar)}<div class="ar">${esc(ar(v.ar))}</div><small>Нажмите, чтобы перевернуть</small></div>
           <div class="back">${esc(v.ru)}<small>Глава ${v.ch}</small></div>
         </div></div>
         <div class="row2">
@@ -393,11 +443,102 @@
     draw();
   }
 
+  /* ---------------- quiz ---------------- */
+  function renderQuiz(scope) {
+    setChrome('Практика', 'cards', false);
+    const chs = book.chapters.filter(c => chapterVocab(c).length);
+    const pool = scope === 'all' ? allVocab() : chapterVocab(book.chapters.find(c => String(c.n) === String(scope)) || chs[0]);
+    const dir = state.qDir || 'ar';
+    const shuffle = (a) => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+    const uniq = (arr, f) => { const s = new Set(); return arr.filter(x => { const k = f(x); if (s.has(k)) return false; s.add(k); return true; }); };
+    const qs = shuffle(uniq(pool, v => v.ru)).slice(0, 10).map(v => {
+      const others = shuffle(uniq(pool.filter(o => o.ru !== v.ru && vkey(o.ar) !== vkey(v.ar)), o => o.ru));
+      let opts = others.slice(0, 3);
+      if (opts.length < 3) opts = opts.concat(shuffle(allVocab().filter(o => o.ru !== v.ru && !opts.includes(o))).slice(0, 3 - opts.length));
+      return { v, opts: shuffle([v].concat(opts)) };
+    });
+    let i = 0, score = 0, answered = false;
+    const wrong = [];
+    const head = () => `
+      <div class="seg top"><button id="toCards">Карточки</button><button class="on">Тест</button></div>
+      <select class="select" id="qch">
+        <option value="all" ${scope === 'all' ? 'selected' : ''}>Все главы</option>
+        ${chs.map(c => `<option value="${c.n}" ${String(scope) === String(c.n) ? 'selected' : ''}>Глава ${c.n}. ${esc(c.ru)}${state.quiz[c.n] != null ? ` · лучший ${state.quiz[c.n]}%` : ''}</option>`).join('')}
+      </select>
+      <div class="seg"><button data-dir="ar" class="${dir === 'ar' ? 'on' : ''}">Арабский → русский</button><button data-dir="ru" class="${dir === 'ru' ? 'on' : ''}">Русский → арабский</button></div>`;
+    const bind = () => {
+      $('#toCards').onclick = () => { haptic(); if (scope !== 'all') state.fcChapter = String(scope); save(); location.hash = '#/cards'; };
+      $('#qch').onchange = e => { location.hash = '#/quiz/' + e.target.value; };
+      view.querySelectorAll('[data-dir]').forEach(b => b.onclick = () => { haptic(); state.qDir = b.dataset.dir; save(); renderQuiz(scope); });
+    };
+    const notify = (t) => { try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred(t); } catch (e) {} };
+    const draw = () => {
+      if (!qs.length) { view.innerHTML = head() + `<div class="empty">В этой главе пока нет слов для теста.</div>`; bind(); return; }
+      if (i >= qs.length) {
+        const pct = Math.round(score / qs.length * 100);
+        if (scope !== 'all') state.quiz[scope] = Math.max(state.quiz[scope] || 0, pct);
+        state.quizCount = (state.quizCount || 0) + 1; save();
+        const verdict = pct === 100 ? 'Без единой ошибки!' : pct >= 80 ? 'Отличный результат.' : pct >= 50 ? 'Неплохо, слова из ошибок стоит повторить.' : 'Стоит повторить слова главы и пройти тест ещё раз.';
+        view.innerHTML = head() + `
+          <div class="qres"><div class="qpct">${pct}%</div><div>${score} из ${qs.length} верно</div><p>${verdict}</p></div>
+          ${wrong.length ? `<div class="h2">Ошибки · отправлены в «Сложные»</div><table class="vocab"><tbody>${wrong.map(v => vrow(v.ar, v.ru)).join('')}</tbody></table>` : ''}
+          <div class="row2"><button class="btn" id="qagain">Ещё раз</button><button class="btn ghost" id="qcards">${svg('cards')}Карточки</button></div>`;
+        bind();
+        $('#qagain').onclick = () => renderQuiz(scope);
+        $('#qcards').onclick = () => { state.fcMode = 'hard'; if (scope !== 'all') state.fcChapter = String(scope); save(); location.hash = '#/cards'; };
+        notify(pct >= 80 ? 'success' : 'warning');
+        return;
+      }
+      const q = qs[i]; answered = false;
+      const prompt = dir === 'ar' ? `<div class="qword ar">${esc(ar(q.v.ar))}</div>` : `<div class="qword">${esc(q.v.ru)}</div>`;
+      view.innerHTML = head() + `
+        <div class="qbar"><span>Вопрос ${i + 1} из ${qs.length}</span><span>Верно: ${score}</span></div>
+        <div class="progress fc-prog"><i style="width:${Math.round(i / qs.length * 100)}%"></i></div>
+        <div class="qcard">${prompt}<small>${dir === 'ar' ? 'Выберите перевод' : 'Выберите слово'}</small></div>
+        <div class="qopts">${q.opts.map((o, k) => `<button class="qopt ${dir === 'ru' ? 'ar' : ''}" data-k="${k}">${esc(dir === 'ar' ? o.ru : ar(o.ar))}</button>`).join('')}</div>
+        <button class="btn" id="qnext" hidden>${i + 1 < qs.length ? 'Следующий вопрос' : 'Результат'} ${svg('right')}</button>`;
+      bind();
+      view.querySelectorAll('.qopt').forEach(b => b.onclick = () => {
+        if (answered) return; answered = true;
+        const o = q.opts[Number(b.dataset.k)], ok = o === q.v;
+        view.querySelectorAll('.qopt').forEach(x => { if (q.opts[Number(x.dataset.k)] === q.v) x.classList.add('ok'); x.disabled = true; });
+        if (ok) { score++; notify('success'); } else { b.classList.add('bad'); notify('error'); wrong.push(q.v); state.cards[vkey(q.v.ar)] = 'hard'; save(); }
+        $('#qnext').hidden = false;
+      });
+      $('#qnext').onclick = () => { haptic(); i++; draw(); window.scrollTo(0, 0); };
+    };
+    draw();
+  }
+
   /* ---------------- settings ---------------- */
   function renderSettings() {
-    setChrome('Настройки', 'settings', false);
+    setChrome('Прогресс', 'settings', false);
+    const ds = allDialogues(), words = allVocab();
+    const known = (c) => (c ? chapterVocab(c) : words).filter(v => state.cards[vkey(v.ar)] === 'known').length;
+    const dDone = (c) => (c ? c.dialogues : ds).filter(d => state.done[d.id]).length;
+    const pctOf = (c) => { const dl = c ? c.dialogues.length : ds.length, wl = c ? chapterVocab(c).length : words.length;
+      return Math.round(((dl ? dDone(c) / dl : 0) + (wl ? known(c) / wl : 0)) / 2 * 100); };
+    const qv = Object.values(state.quiz || {}); const qAvg = qv.length ? Math.round(qv.reduce((a, b) => a + b, 0) / qv.length) : null;
+    const favDs = ds.filter(d => state.favD[d.id]);
+    const total = pctOf(null), sk = streak();
+    const progressHtml = `
+      <section class="pcard">
+        <div class="ptop"><span>Общий прогресс по тому 1</span><b>${total}%</b></div>
+        <div class="progress"><i style="width:${total}%"></i></div>
+      </section>
+      <div class="stats">
+        <div><b>${dDone(null)}<small>/${ds.length}</small></b><span>диалогов пройдено</span></div>
+        <div><b>${known(null)}<small>/${words.length}</small></b><span>слов выучено</span></div>
+        <div><b>${qAvg != null ? qAvg + '%' : '—'}</b><span>средний тест</span></div>
+        <div class="streak"><b>${svg('flame')}${sk}</b><span>${sk % 10 === 1 && sk % 100 !== 11 ? 'день' : (sk % 10 >= 2 && sk % 10 <= 4 && (sk % 100 < 10 || sk % 100 >= 20)) ? 'дня' : 'дней'} подряд</span></div>
+      </div>
+      <div class="h2">По главам</div>
+      <div class="card chprog">${book.chapters.map(c => { const p = pctOf(c); return `<button class="cp" data-cw="${c.n}">
+          <span class="hex sm">${c.n}</span><span class="cpt"><span>${esc(c.ru)}</span><span class="progress"><i style="width:${p}%"></i></span></span><b>${p}%</b></button>`; }).join('')}</div>
+      ${favDs.length ? `<div class="h2">Избранные диалоги</div><div class="mats">${favDs.map(d => `<button class="mat" data-d="${d.id}"><span>${d.ch.n}.${d.n} · ${esc(d.ru || d.ar)}</span><small></small>${svg('right')}</button>`).join('')}</div>` : ''}
+      <div class="h2">Настройки</div>`;
     const opt = (key, val, label) => `<button data-k="${key}" data-v="${val}" class="${String(state[key]) === String(val) ? 'on' : ''}">${label}</button>`;
-    view.innerHTML = `
+    view.innerHTML = progressHtml + `
       <div class="card">
         <div class="set"><label>Тема</label><div class="opts">${opt('theme', 'auto', 'Авто')}${opt('theme', 'light', 'Светлая')}${opt('theme', 'dark', 'Тёмная')}</div></div>
         <div class="set"><label>Размер арабского текста</label><div class="opts">${opt('scale', 0.85, 'A−')}${opt('scale', 1, 'A')}${opt('scale', 1.2, 'A+')}${opt('scale', 1.4, 'A++')}</div></div>
@@ -420,10 +561,12 @@
       const b = e.target.closest('[data-k]');
       if (b) { haptic(); const k = b.dataset.k; state[k] = k === 'scale' ? Number(b.dataset.v) : b.dataset.v; save(); applyTheme(); renderSettings(); return; }
       if (e.target.closest('#hk')) { haptic(); state.harakat = !state.harakat; save(); renderSettings(); return; }
+      const cw = e.target.closest('[data-cw]'); if (cw) { haptic(); location.hash = '#/w/' + cw.dataset.cw; return; }
+      const dd = e.target.closest('[data-d]'); if (dd) { haptic(); location.hash = '#/d/' + dd.dataset.d; return; }
       if (e.target.closest('#resetCards')) {
-        const doReset = () => { state.cards = {}; save(); toast('Карточки сброшены'); renderSettings(); };
-        if (tg && tg.showConfirm) tg.showConfirm('Сбросить отметки о выученных словах?', ok => ok && doReset());
-        else if (confirm('Сбросить отметки о выученных словах?')) doReset();
+        const doReset = () => { state.cards = {}; state.quiz = {}; save(); toast('Карточки сброшены'); renderSettings(); };
+        if (tg && tg.showConfirm) tg.showConfirm('Сбросить выученные слова и результаты тестов?', ok => ok && doReset());
+        else if (confirm('Сбросить выученные слова и результаты тестов?')) doReset();
         return;
       }
       if (e.target.closest('#reset')) {
@@ -450,6 +593,16 @@
     }
   });
 
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-fav]'); if (!b) return;
+    e.stopPropagation(); e.preventDefault(); haptic();
+    const k = b.dataset.fav;
+    if (state.fav[k]) delete state.fav[k]; else state.fav[k] = 1;
+    save();
+    document.querySelectorAll(`[data-fav="${CSS.escape(k)}"]`).forEach(x => x.classList.toggle('on', !!state.fav[k]));
+    toast(state.fav[k] ? 'Добавлено в избранное' : 'Убрано из избранного');
+  }, true);
+
   /* ---------------- start ---------------- */
   loadLocal();
   applyTheme();
@@ -462,5 +615,5 @@
     } catch (e) {}
   }
   window.addEventListener('hashchange', route);
-  loadCloud(() => { applyTheme(); route(); });
+  loadCloud(() => { markActive(); applyTheme(); route(); });
 })();
