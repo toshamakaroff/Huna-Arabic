@@ -56,7 +56,7 @@
   const allDialogues = () => book.chapters.flatMap(c => c.dialogues.map(d => ({ ...d, ch: c })));
   const findDialogue = (id) => allDialogues().find(d => d.id === id);
   const allVocab = () => book.chapters.flatMap(c => c.dialogues.flatMap(d => (d.vocab || []).map(v => ({ ar: v[0], ru: v[1], ch: c.n, d: d.id }))));
-  const pageSrc = (n) => `pages/${n}.webp`;
+  const pageSrc = (n) => `${n}.webp`;
   const haptic = (t = 'light') => { try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
   function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); }
 
