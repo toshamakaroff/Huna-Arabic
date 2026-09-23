@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Хуна Аль-Арабия</title>
+<link rel="icon" href="assets/bot-avatar.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<!--TG-->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<!--/TG-->
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <button class="icon-btn" id="backBtn" aria-label="Назад" hidden>
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <img class="logo" id="logo" src="assets/logo-white.png" alt="HUNA ARABIC">
+    <h1 id="title">Том 1</h1>
+    <button class="icon-btn" id="shareBtn" aria-label="Поделиться">
+      <svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></svg>
+    </button>
+  </header>
+  <main id="view"></main>
+  <nav class="tabbar" id="tabbar"></nav>
+</div>
+<div class="toast" id="toast"></div>
+<script src="data/book1.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
