@@ -131,6 +131,95 @@
   const haptic = (t = 'light') => { try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
   function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); }
 
+  /* ---------------- audio ---------------- */
+  // Файлы: audio/vol1/1.1.mp3, audio/vol2/9.1.mp3 (или audio/vol2/1.1.mp3 — нумерация внутри тома тоже понимается)
+  const player = new Audio();
+  player.preload = 'metadata';
+  const AUD = { id: null, srcs: [], i: 0, ok: {}, speed: 1 };
+  const SPEEDS = [1, 0.75, 0.5];
+  const AI = {
+    play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
+    pause: '<path d="M8.5 5v14M15.5 5v14" stroke-width="3"/>',
+    back: '<path d="M4.5 12a7.5 7.5 0 107.5-7.5H8"/><path d="M10.5 1.5L7.5 4.5l3 3"/>',
+    loop: '<path d="M17 2.5l3 3-3 3"/><path d="M4 11V9.5a4 4 0 014-4h12"/><path d="M7 21.5l-3-3 3-3"/><path d="M20 13v1.5a4 4 0 01-4 4H4"/>'
+  };
+  const asvg = (n) => `<svg viewBox="0 0 24 24" aria-hidden="true">${AI[n]}</svg>`;
+  const fmt = (t) => { t = Math.max(0, Math.floor(t || 0)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+  function audioCandidates(d) {
+    const b = BOOKS.find(x => x.chapters.includes(d.ch)) || book;
+    const out = [`audio/${b.id}/${d.id}.mp3`];
+    const alt = `${b.chapters.indexOf(d.ch) + 1}.${d.n}`;
+    if (alt !== d.id) out.push(`audio/${b.id}/${alt}.mp3`);
+    return out;
+  }
+  function audioLoad(d) {
+    if (AUD.id === d.id) return;
+    player.pause();
+    AUD.id = d.id; AUD.i = 0;
+    const known = AUD.ok[d.id];
+    if (known === false) { player.removeAttribute('src'); player.load(); return; }
+    AUD.srcs = known ? [known] : audioCandidates(d);
+    player.src = AUD.srcs[0];
+    player.load();
+  }
+  function audioStop() { player.pause(); }
+  const audioState = () => { const k = AUD.ok[AUD.id]; return k === false ? 'none' : k ? 'ready' : 'loading'; };
+  const audioHTML = () => `<div class="aplayer ${audioState()}" id="aplayer">
+      <button class="a-play" id="aPlay" aria-label="Слушать">${asvg(player.paused ? 'play' : 'pause')}</button>
+      <div class="a-mid">
+        <input type="range" id="aSeek" min="0" max="1000" value="0" aria-label="Перемотка">
+        <div class="a-time"><span id="aCur">0:00</span><span id="aDur">загрузка…</span></div>
+      </div>
+      <button class="a-btn" id="aBack" aria-label="Назад на 5 секунд">${asvg('back')}</button>
+      <button class="a-btn a-speed" id="aSpeed" aria-label="Скорость">${AUD.speed}×</button>
+      <button class="a-btn ${player.loop ? 'on' : ''}" id="aLoop" aria-label="Повтор">${asvg('loop')}</button>
+    </div>`;
+  function audioSync() {
+    const box = $('#aplayer'); if (!box) return;
+    box.className = 'aplayer ' + audioState();
+    const dur = player.duration || 0, p = dur ? player.currentTime / dur : 0;
+    $('#aPlay').innerHTML = asvg(player.paused ? 'play' : 'pause');
+    $('#aPlay').setAttribute('aria-label', player.paused ? 'Слушать' : 'Пауза');
+    if (!AUD.drag) $('#aSeek').value = Math.round(p * 1000);
+    $('#aSeek').style.setProperty('--p', (p * 100) + '%');
+    $('#aCur').textContent = fmt(player.currentTime);
+    $('#aDur').textContent = AUD.ok[AUD.id] ? fmt(dur) : 'загрузка…';
+    $('#aSpeed').textContent = AUD.speed + '×';
+    $('#aLoop').classList.toggle('on', player.loop);
+  }
+  player.addEventListener('loadedmetadata', () => {
+    AUD.ok[AUD.id] = AUD.srcs[AUD.i];
+    player.defaultPlaybackRate = player.playbackRate = AUD.speed;
+    audioSync();
+  });
+  player.addEventListener('error', () => {
+    if (!player.getAttribute('src')) return;
+    AUD.i++;
+    if (AUD.i < AUD.srcs.length) { player.src = AUD.srcs[AUD.i]; player.load(); }
+    else { AUD.ok[AUD.id] = false; audioSync(); }
+  });
+  ['timeupdate', 'play', 'pause', 'ended', 'durationchange'].forEach(ev => player.addEventListener(ev, audioSync));
+  function audioClick(e) {
+    if (e.target.closest('#aPlay')) {
+      haptic();
+      if (player.paused) { if (player.ended) player.currentTime = 0; player.play().catch(() => toast('Не удалось воспроизвести')); }
+      else player.pause();
+      return true;
+    }
+    if (e.target.closest('#aBack')) { haptic(); player.currentTime = Math.max(0, player.currentTime - 5); audioSync(); return true; }
+    if (e.target.closest('#aSpeed')) {
+      haptic(); AUD.speed = SPEEDS[(SPEEDS.indexOf(AUD.speed) + 1) % SPEEDS.length];
+      player.defaultPlaybackRate = player.playbackRate = AUD.speed; state.aSpeed = AUD.speed; save(); audioSync(); return true;
+    }
+    if (e.target.closest('#aLoop')) { haptic(); player.loop = !player.loop; toast(player.loop ? 'Повтор включён' : 'Повтор выключен'); audioSync(); return true; }
+    return !!e.target.closest('#aplayer');
+  }
+  document.addEventListener('input', e => {
+    if (e.target.id !== 'aSeek' || !player.duration) return;
+    AUD.drag = true; player.currentTime = e.target.value / 1000 * player.duration; audioSync();
+  });
+  document.addEventListener('change', e => { if (e.target.id === 'aSeek') AUD.drag = false; });
+
   function applyTheme() {
     let theme = state.theme;
     if (theme === 'auto' && tg && tg.colorScheme) theme = tg.colorScheme;
@@ -178,6 +267,7 @@
     const [name, arg] = h.split('/');
     window.scrollTo(0, 0);
     $('#toast').classList.remove('show');
+    if (name !== 'd') audioStop();
     if (name === 'd' && arg) return renderDialogue(decodeURIComponent(arg));
     if (name === 'p' && arg) return renderPages(arg.split(',').map(Number), decodeURIComponent(h.split('/')[2] || ''));
     if (name === 'w' && arg) return renderWords(Number(arg));
@@ -265,6 +355,7 @@
   function renderDialogue(id) {
     const d = findDialogue(id);
     if (!d) { location.hash = '#/'; return; }
+    audioLoad(d);
     setChrome(`Глава ${d.ch.n} · ${d.ch.n === 16 ? 'Текст' : 'Диалог'} ${d.n}`, 'home', true);
     const hasText = !!(d.lines && d.lines.length);
     const tabs = [];
@@ -297,6 +388,7 @@
       view.innerHTML = `
         <div class="dhead"><span class="ar">${esc(ar(d.ar))}</span>${d.ru ? `<span class="ru">${esc(d.ru)}</span>` : ''}
           <button class="dstar ${state.favD[d.id] ? 'on' : ''}" id="favD">${svg('star')}${state.favD[d.id] ? 'В избранном' : 'В избранное'}</button></div>
+        ${audioHTML()}
         ${tabs.length > 1 ? `<div class="seg">${tabs.map(t => `<button data-seg="${t[0]}" class="${t[0] === cur ? 'on' : ''}">${t[1]}</button>`).join('')}</div>` : ''}
         ${body}
         ${mats.length ? `<div class="h2">К этому диалогу</div><div class="mats">${mats.map(matRow).join('')}</div>` : ''}
@@ -304,12 +396,14 @@
           <button class="btn ${isDone ? 'ghost' : ''}" id="doneBtn">${svg('check')}${isDone ? 'Пройдено' : 'Отметить пройденным'}</button>
           ${next ? `<button class="btn ghost" id="nextBtn">Дальше ${svg('right')}</button>` : `<button class="btn ghost" id="homeBtn">К главам</button>`}
         </div>`;
+      audioSync();
       view.onclick = e => {
+        if (audioClick(e)) return;
         const s = e.target.closest('[data-seg]'); if (s) { haptic(); cur = s.dataset.seg; draw(); return; }
         if (e.target.closest('#favD')) { haptic(); if (state.favD[d.id]) delete state.favD[d.id]; else state.favD[d.id] = 1; save(); draw(); return; }
         if (e.target.closest('#doneBtn')) {
           state.done[d.id] = !state.done[d.id]; if (!state.done[d.id]) delete state.done[d.id];
-          save(); haptic('medium'); toast(state.done[d.id] ? 'Диалог отмечен' : 'Отметка снята'); draw(); return;
+          save(); if (state.done[d.id]) { try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch (x) {} } else haptic('medium'); toast(state.done[d.id] ? 'Диалог отмечен' : 'Отметка снята'); draw(); return;
         }
         if (e.target.closest('#nextBtn')) { haptic(); location.hash = '#/d/' + next.id; return; }
         if (e.target.closest('#homeBtn')) { location.hash = '#/'; return; }
@@ -630,11 +724,12 @@
   if (tg) {
     try {
       tg.ready(); tg.expand();
+      if (tg.disableVerticalSwipes && tg.isVersionAtLeast && tg.isVersionAtLeast('7.7')) tg.disableVerticalSwipes();
       tg.BackButton && tg.BackButton.onClick(goBack);
       tg.onEvent && tg.onEvent('themeChanged', applyTheme);
       document.body.classList.add('in-telegram');
     } catch (e) {}
   }
   window.addEventListener('hashchange', route);
-  loadCloud(() => { if (state.vol) { const b = BOOKS.find(x => x.id === state.vol); if (b) book = b; } markActive(); applyTheme(); route(); });
+  loadCloud(() => { if (SPEEDS.includes(state.aSpeed)) AUD.speed = state.aSpeed; if (state.vol) { const b = BOOKS.find(x => x.id === state.vol); if (b) book = b; } markActive(); applyTheme(); route(); });
 })();
