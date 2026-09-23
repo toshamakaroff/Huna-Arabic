@@ -1,3 +1,12 @@
+@font-face { font-family: "Manrope"; font-style: normal; font-weight: 400; font-display: swap; src: url("assets/fonts/manrope-400.woff2") format("woff2"); }
+@font-face { font-family: "Manrope"; font-style: normal; font-weight: 500; font-display: swap; src: url("assets/fonts/manrope-500.woff2") format("woff2"); }
+@font-face { font-family: "Manrope"; font-style: normal; font-weight: 600; font-display: swap; src: url("assets/fonts/manrope-600.woff2") format("woff2"); }
+@font-face { font-family: "Manrope"; font-style: normal; font-weight: 700; font-display: swap; src: url("assets/fonts/manrope-700.woff2") format("woff2"); }
+@font-face { font-family: "Manrope"; font-style: normal; font-weight: 800; font-display: swap; src: url("assets/fonts/manrope-800.woff2") format("woff2"); }
+@font-face { font-family: "Noto Naskh Arabic"; font-style: normal; font-weight: 400; font-display: swap; src: url("assets/fonts/noto-naskh-arabic-400.woff2") format("woff2"); }
+@font-face { font-family: "Noto Naskh Arabic"; font-style: normal; font-weight: 600; font-display: swap; src: url("assets/fonts/noto-naskh-arabic-600.woff2") format("woff2"); }
+@font-face { font-family: "Noto Naskh Arabic"; font-style: normal; font-weight: 700; font-display: swap; src: url("assets/fonts/noto-naskh-arabic-700.woff2") format("woff2"); }
+
 :root {
   --navy-deep: #001a33;
   --navy: #00254a;
@@ -17,7 +26,7 @@
   --speaker-3: #e07a14;
   --shadow: 0 1px 2px rgba(0, 37, 74, .06), 0 4px 14px rgba(0, 37, 74, .07);
 
-  --ar: "Noto Naskh Arabic", "Amiri", "Geeza Pro", "Traditional Arabic", serif;
+  --ar: "Noto Naskh Arabic", "Geeza Pro", "Traditional Arabic", serif;
   --ui: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --ar-scale: 1;
 
