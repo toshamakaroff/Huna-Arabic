@@ -1,3 +1,4 @@
+@font-face { font-family: "KFGQPC Hafs"; font-style: normal; font-weight: 400; font-display: swap; src: url("assets/fonts/kfgqpc-hafs.otf") format("opentype"); }
 @font-face { font-family: "Manrope"; font-style: normal; font-weight: 400; font-display: swap; src: url("assets/fonts/manrope-400.woff2") format("woff2"); }
 @font-face { font-family: "Manrope"; font-style: normal; font-weight: 500; font-display: swap; src: url("assets/fonts/manrope-500.woff2") format("woff2"); }
 @font-face { font-family: "Manrope"; font-style: normal; font-weight: 600; font-display: swap; src: url("assets/fonts/manrope-600.woff2") format("woff2"); }
@@ -302,8 +303,9 @@ a.link { color: var(--speaker-2); font-weight: 700; text-decoration: none; }
 .h2.sub { font-size: 14px; color: var(--muted); margin: 14px 4px 8px; }
 
 /* ---------- ayah & prose continuation ---------- */
-.line.ayah { font-family: "Amiri Quran", "Amiri", var(--ar); font-weight: 400; font-size: calc(24px * var(--ar-scale)); line-height: 2.1;
+.line.ayah { font-family: "KFGQPC Hafs", var(--ar); font-weight: 400; font-size: calc(26px * var(--ar-scale)); line-height: 2.2;
   text-align: center; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin: 6px 0; }
+.line.ayah .orn { font-family: var(--ar); font-weight: 700; color: var(--speaker-2); font-size: 1.05em; padding: 0 .12em; }
 .line.cont { font-weight: 600; }
 .line.cont.s1 { color: var(--speaker-1); }
 .line.cont.s2 { color: var(--speaker-2); }

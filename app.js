@@ -121,6 +121,9 @@
     const end = ds[i + 1] ? ds[i + 1].page : Infinity;
     return labeledSections(ch).filter(s => s.page > d.page && s.page < end && s.type !== 'prac');
   }
+  // аяты: огласовки всегда видны, номер аята внутри скобок, скобки оформлены отдельно
+  const ayahHTML = (t) => esc(t).replace(/﴾\s*(\([٠-٩]+\))/g, ' $1﴾').replace(/\(([٠-٩]+)\)/g, '$1')
+    .replace(/[﴿﴾]/g, m => `<span class="orn">${m}</span>`);
   const isFav = (a) => !!state.fav[vkey(a)];
   const starBtn = (a) => `<button class="star ${isFav(a) ? 'on' : ''}" data-fav="${esc(vkey(a))}" aria-label="В избранное">${svg('star')}</button>`;
   const vrow = (a, r) => `<tr><td class="ru"><div class="rucell">${starBtn(a)}<span>${esc(r)}</span></div></td><td class="ar">${esc(ar(a))}</td></tr>`;
@@ -373,7 +376,8 @@
           const c = l[2] || (Math.min(order.indexOf(l[0]), 2) + 1);
           const cls = c === 4 ? 'ayah' : c === 5 ? 's1 cont' : c === 6 ? 's2 cont' : 's' + c + (l[0] ? '' : ' quote');
           const sp = l[0] ? `<span class="sp">${esc(ar(l[0]))}:</span> ` : '';
-          return `<div class="line ${cls}">${sp}${esc(ar(l[1]))}</div>`;
+          const txt = c === 4 ? ayahHTML(l[1]) : esc(ar(l[1]));
+          return `<div class="line ${cls}">${sp}${txt}</div>`;
         }).join('')}</div>`;
       } else if (cur === 'vocab') {
         body = `<table class="vocab"><thead><tr><th>Значение</th><th class="ar">الكَلِمة الجَدِيدة</th></tr></thead><tbody>${
