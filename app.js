@@ -33,7 +33,7 @@
 
   /* ---------------- storage (Telegram CloudStorage + local fallback) ---------------- */
   const KEY = 'huna_state_v1';
-  const state = { done: {}, theme: 'auto', scale: 1, harakat: true, fcChapter: 'all' };
+  const state = { done: {}, theme: 'auto', scale: 1, harakat: true, fcChapter: 'all', fcMode: 'new', cards: {} };
   function loadLocal() { try { Object.assign(state, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {} }
   function save() {
     const s = JSON.stringify(state);
@@ -64,6 +64,18 @@
     return out;
   };
   const allVocab = () => book.chapters.flatMap(chapterVocab);
+  const vkey = (a) => String(a).replace(/[\u064B-\u0652\u0670\s]/g, '');
+  function labeledSections(ch) {
+    const tot = {}, cnt = {};
+    ch.sections.forEach(s => { tot[s.ru] = (tot[s.ru] || 0) + 1; });
+    return ch.sections.map(s => { cnt[s.ru] = (cnt[s.ru] || 0) + 1; return { ...s, label: tot[s.ru] > 1 ? `${s.ru} ${cnt[s.ru]}` : s.ru }; });
+  }
+  function dialogueMaterials(d) {
+    const ch = d.ch, ds = ch.dialogues, i = ds.findIndex(x => x.id === d.id);
+    const end = ds[i + 1] ? ds[i + 1].page : Infinity;
+    return labeledSections(ch).filter(s => s.page > d.page && s.page < end && s.type !== 'prac');
+  }
+  const matRow = (s) => `<button class="mat" data-p="${s.page}" data-t="${esc(s.label)}"><span>${esc(s.label)}</span><small>стр. ${s.page}</small>${svg('right')}</button>`;
   const pageSrc = (n) => `${n}.webp`;
   const haptic = (t = 'light') => { try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
   function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); }
@@ -151,12 +163,13 @@
         </button>`;
       }).join('');
       const dots = ch.dialogues.map((_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('');
-      const cnt = {}, tot = {};
-      ch.sections.forEach(s => { tot[s.ru] = (tot[s.ru] || 0) + 1; });
-      const chips = ch.sections.map(s => { cnt[s.ru] = (cnt[s.ru] || 0) + 1; const t = tot[s.ru] > 1 ? `${s.ru} ${cnt[s.ru]}` : s.ru;
-        return `<button class="chip" data-p="${s.page}" data-t="${esc(t)}">${esc(t)}</button>`; }).join('');
+      const secs = labeledSections(ch);
       const nW = chapterVocab(ch).length;
-      const wordsChip = nW ? `<button class="chip chip-words" data-w="${ch.n}">Слова главы · ${nW}</button>` : '';
+      const tools = `<div class="ch-tools">
+          ${nW ? `<button class="tool" data-w="${ch.n}">${svg('dict')}<span>Слова главы<small>${nW} слов</small></span></button>` : ''}
+          <button class="tool" data-mat="${ch.n}" aria-expanded="false">${svg('page')}<span>Материалы<small>${secs.length} разделов</small></span></button>
+        </div>
+        <div class="mats" id="mats-${ch.n}" hidden>${secs.map(matRow).join('')}</div>`;
       return `<article class="chapter">
         <div class="ch-head">
           <div class="hex">${ch.n}</div>
@@ -169,7 +182,7 @@
           <button class="arrow r" aria-label="Следующий диалог" ${ch.dialogues.length < 2 ? 'disabled' : ''}>${svg('right')}</button>
           <div class="dots">${dots}</div>
         </div>
-        <div class="chips">${wordsChip}${chips}</div>
+        ${tools}
       </article>`;
     }).join('');
     view.innerHTML = html;
@@ -184,6 +197,8 @@
     });
     view.onclick = e => {
       const d = e.target.closest('[data-d]'); if (d) { haptic(); location.hash = '#/d/' + d.dataset.d; return; }
+      const m = e.target.closest('[data-mat]');
+      if (m) { haptic(); const box = $('#mats-' + m.dataset.mat); box.hidden = !box.hidden; m.setAttribute('aria-expanded', String(!box.hidden)); m.classList.toggle('open', !box.hidden); return; }
       const w = e.target.closest('[data-w]'); if (w) { haptic(); location.hash = '#/w/' + w.dataset.w; return; }
       const p = e.target.closest('[data-p]'); if (p) { haptic(); location.hash = `#/p/${p.dataset.p}/${encodeURIComponent(p.dataset.t)}`; }
     };
@@ -219,11 +234,13 @@
         body = pages.map(p => `<img class="page-img" loading="lazy" src="${pageSrc(p)}" alt="Страница ${p} учебника">`).join('');
       }
       const isDone = !!state.done[d.id];
+      const mats = dialogueMaterials(d);
       const list = allDialogues(); const i = list.findIndex(x => x.id === d.id); const next = list[i + 1];
       view.innerHTML = `
         <div class="dhead"><span class="ar">${esc(ar(d.ar))}</span>${d.ru ? `<span class="ru">${esc(d.ru)}</span>` : ''}</div>
         ${tabs.length > 1 ? `<div class="seg">${tabs.map(t => `<button data-seg="${t[0]}" class="${t[0] === cur ? 'on' : ''}">${t[1]}</button>`).join('')}</div>` : ''}
         ${body}
+        ${mats.length ? `<div class="h2">К этому диалогу</div><div class="mats">${mats.map(matRow).join('')}</div>` : ''}
         <div class="row2">
           <button class="btn ${isDone ? 'ghost' : ''}" id="doneBtn">${svg('check')}${isDone ? 'Пройдено' : 'Отметить пройденным'}</button>
           ${next ? `<button class="btn ghost" id="nextBtn">Дальше ${svg('right')}</button>` : `<button class="btn ghost" id="homeBtn">К главам</button>`}
@@ -235,7 +252,8 @@
           save(); haptic('medium'); toast(state.done[d.id] ? 'Диалог отмечен' : 'Отметка снята'); draw(); return;
         }
         if (e.target.closest('#nextBtn')) { haptic(); location.hash = '#/d/' + next.id; return; }
-        if (e.target.closest('#homeBtn')) { location.hash = '#/'; }
+        if (e.target.closest('#homeBtn')) { location.hash = '#/'; return; }
+        const p = e.target.closest('[data-p]'); if (p) { haptic(); location.hash = `#/p/${p.dataset.p}/${encodeURIComponent(p.dataset.t)}`; }
       };
     };
     draw();
@@ -298,7 +316,7 @@
   /* ---------------- dictionary ---------------- */
   function renderDict(q = '') {
     setChrome('Словарь', 'dict', false);
-    const norm = s => String(s).toLowerCase().replace(HARAKAT, '').replace(/[أإآ]/g, 'ا');
+    const norm = s => String(s).toLowerCase().replace(HARAKAT, '').replace(/\u0640/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/ё/g, 'е');
     const words = allVocab();
     const draw = (q) => {
       const nq = norm(q.trim());
@@ -321,22 +339,44 @@
   function renderCards() {
     setChrome('Карточки', 'cards', false);
     const chs = book.chapters.filter(c => chapterVocab(c).length);
-    let deck = allVocab().filter(v => state.fcChapter === 'all' || String(v.ch) === String(state.fcChapter));
+    const pool = allVocab().filter(v => state.fcChapter === 'all' || String(v.ch) === String(state.fcChapter));
+    const st = (v) => state.cards[vkey(v.ar)];
+    let counts;
+    const recount = () => { counts = { new: pool.filter(v => st(v) !== 'known').length, hard: pool.filter(v => st(v) === 'hard').length, all: pool.length, known: pool.filter(v => st(v) === 'known').length }; };
+    recount();
+    const mode = state.fcMode || 'new';
+    let deck = pool.filter(v => mode === 'all' ? true : mode === 'hard' ? st(v) === 'hard' : st(v) !== 'known');
     deck = deck.sort(() => Math.random() - .5);
-    let i = 0, known = 0;
+    let i = 0, learned = 0;
+    const head = () => `
+      <select class="select" id="fch">
+        <option value="all">Все главы</option>
+        ${chs.map(c => `<option value="${c.n}" ${String(state.fcChapter) === String(c.n) ? 'selected' : ''}>Глава ${c.n}. ${esc(c.ru)}</option>`).join('')}
+      </select>
+      <div class="seg">
+        <button data-mode="new" class="${mode === 'new' ? 'on' : ''}">Не выучено · ${counts.new}</button>
+        <button data-mode="hard" class="${mode === 'hard' ? 'on' : ''}">Сложные · ${counts.hard}</button>
+        <button data-mode="all" class="${mode === 'all' ? 'on' : ''}">Все · ${counts.all}</button>
+      </div>
+      <div class="progress fc-prog"><i style="width:${counts.all ? Math.round(counts.known / counts.all * 100) : 0}%"></i></div>
+      <div class="fc-meta">Выучено ${counts.known} из ${counts.all}</div>`;
+    const bind = () => {
+      $('#fch').onchange = e => { state.fcChapter = e.target.value; save(); renderCards(); };
+      view.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { haptic(); state.fcMode = b.dataset.mode; save(); renderCards(); });
+    };
     const draw = () => {
-      if (!deck.length) { view.innerHTML = `<div class="empty">Слов для этой главы пока нет.</div>`; return; }
-      if (i >= deck.length) {
-        view.innerHTML = `<div class="empty"><b>Колода пройдена.</b><br>Знаю: ${known} из ${deck.length}</div><button class="btn" id="again">Пройти ещё раз</button>`;
-        $('#again').onclick = renderCards; return;
+      if (!deck.length) {
+        const msg = mode === 'hard' ? 'Сложных слов нет. Слова попадают сюда, когда вы нажимаете «Повторить».'
+          : mode === 'new' ? 'Все слова выучены. Откройте «Все», чтобы повторить их ещё раз.' : 'В этой главе пока нет слов.';
+        view.innerHTML = head() + `<div class="empty">${msg}</div>`; bind(); return;
       }
-      const v = deck[i];
-      view.innerHTML = `
-        <select class="select" id="fch">
-          <option value="all">Все главы</option>
-          ${chs.map(c => `<option value="${c.n}" ${String(state.fcChapter) === String(c.n) ? 'selected' : ''}>Глава ${c.n}. ${esc(c.ru)}</option>`).join('')}
-        </select>
-        <div class="fc-meta">${i + 1} / ${deck.length}</div>
+      if (i >= deck.length) {
+        view.innerHTML = head() + `<div class="empty"><b>Колода пройдена.</b><br>Отмечено как выученные: ${learned}</div><button class="btn" id="again">Пройти ещё раз</button>`;
+        bind(); $('#again').onclick = renderCards; return;
+      }
+      const v = deck[i], s = st(v);
+      view.innerHTML = head() + `
+        <div class="fc-meta">${i + 1} / ${deck.length}${s === 'hard' ? ' · сложное' : s === 'known' ? ' · выучено' : ''}</div>
         <div class="fc-wrap"><div class="fc" id="fc">
           <div class="front"><div class="ar">${esc(ar(v.ar))}</div><small>Нажмите, чтобы перевернуть</small></div>
           <div class="back">${esc(v.ru)}<small>Глава ${v.ch}</small></div>
@@ -345,10 +385,10 @@
           <button class="btn ghost" id="again1">Повторить</button>
           <button class="btn" id="know">${svg('check')}Знаю</button>
         </div>`;
+      bind();
       $('#fc').onclick = () => { haptic(); $('#fc').classList.toggle('flip'); };
-      $('#know').onclick = () => { haptic('medium'); known++; i++; draw(); };
-      $('#again1').onclick = () => { haptic(); deck.push(deck[i]); i++; draw(); };
-      $('#fch').onchange = e => { state.fcChapter = e.target.value; save(); renderCards(); };
+      $('#know').onclick = () => { haptic('medium'); if (st(v) !== 'known') learned++; state.cards[vkey(v.ar)] = 'known'; save(); recount(); i++; draw(); };
+      $('#again1').onclick = () => { haptic(); state.cards[vkey(v.ar)] = 'hard'; save(); recount(); deck.push(v); i++; draw(); };
     };
     draw();
   }
@@ -365,7 +405,8 @@
         <div class="preview ar">${esc(ar('السَّلامُ عَلَيْكُم وَرَحْمَةُ اللّٰهِ'))}</div>
       </div>
       <div class="card">
-        <div class="set"><label>Прогресс<small>Отмечено диалогов: ${Object.keys(state.done).length}</small></label><button class="chip" id="reset">Сбросить</button></div>
+        <div class="set"><label>Пройденные диалоги<small>Отмечено: ${Object.keys(state.done).length} из ${allDialogues().length}</small></label><button class="chip" id="reset">Сбросить</button></div>
+        <div class="set"><label>Карточки<small>Выучено слов: ${Object.values(state.cards).filter(x => x === 'known').length}</small></label><button class="chip" id="resetCards">Сбросить</button></div>
       </div>
       <div class="about">
         <img src="assets/logo-navy.png" alt="" onerror="this.remove()"><br>
@@ -379,6 +420,12 @@
       const b = e.target.closest('[data-k]');
       if (b) { haptic(); const k = b.dataset.k; state[k] = k === 'scale' ? Number(b.dataset.v) : b.dataset.v; save(); applyTheme(); renderSettings(); return; }
       if (e.target.closest('#hk')) { haptic(); state.harakat = !state.harakat; save(); renderSettings(); return; }
+      if (e.target.closest('#resetCards')) {
+        const doReset = () => { state.cards = {}; save(); toast('Карточки сброшены'); renderSettings(); };
+        if (tg && tg.showConfirm) tg.showConfirm('Сбросить отметки о выученных словах?', ok => ok && doReset());
+        else if (confirm('Сбросить отметки о выученных словах?')) doReset();
+        return;
+      }
       if (e.target.closest('#reset')) {
         const doReset = () => { state.done = {}; save(); toast('Прогресс сброшен'); renderSettings(); };
         if (tg && tg.showConfirm) tg.showConfirm('Сбросить все отметки о пройденных диалогах?', ok => ok && doReset());
