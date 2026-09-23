@@ -286,3 +286,15 @@ a.link { color: var(--speaker-2); font-weight: 700; text-decoration: none; }
 [hidden] { display: none !important; }
 .qopt.ok { background: rgba(31,157,107,.22); }
 .qopt.bad { background: rgba(214,69,69,.22); }
+
+/* ---------- volumes ---------- */
+.seg.vol { margin-bottom: 12px; }
+.seg.vol button { font-size: 14.5px; padding: 9px 6px; }
+.h2.sub { font-size: 14px; color: var(--muted); margin: 14px 4px 8px; }
+
+/* ---------- ayah & prose continuation ---------- */
+.line.ayah { font-family: "Amiri Quran", "Amiri", var(--ar); font-weight: 400; font-size: calc(24px * var(--ar-scale)); line-height: 2.1;
+  text-align: center; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin: 6px 0; }
+.line.cont { font-weight: 600; }
+.line.cont.s1 { color: var(--speaker-1); }
+.line.cont.s2 { color: var(--speaker-2); }

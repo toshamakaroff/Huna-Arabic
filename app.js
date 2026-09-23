@@ -4,7 +4,10 @@
   const _tg = window.Telegram && window.Telegram.WebApp;
   const tg = _tg && (_tg.initData || (_tg.platform && _tg.platform !== 'unknown')) ? _tg : null;
   const BOOKS = window.BOOK_DATA || [];
-  const book = BOOKS[0];
+  let book = BOOKS[0];
+  const findChapter = (n) => { for (const b of BOOKS) { const c = b.chapters.find(x => String(x.n) === String(n)); if (c) return { b, c }; } return null; };
+  BOOKS.forEach(b => { if (b.id === 'vol1') { b.pages = b.pages || 154; b.toc = b.toc || [['Предисловие', 4], ['Словарь', 128], ['Приложения: числа, дни, цвета, месяцы', 147]]; } });
+  function setBook(id) { const b = BOOKS.find(x => x.id === id); if (b && b !== book) { book = b; state.vol = id; save(); } }
   const $ = (s, r = document) => r.querySelector(s);
   const view = $('#view');
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -31,6 +34,10 @@
     quiz: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 015 .9c0 1.7-2.5 2.2-2.5 3.9M12 17h.01"/>',
     chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     flame: '<path d="M12 22c4 0 7-2.8 7-6.8 0-3.2-2-5.7-4-7.7.2 2-1 3.5-2.2 3.5C11 11 12 7 9.5 3 9.4 6.6 5 9.6 5 15.2 5 19.2 8 22 12 22z"/>',
+    heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    child: '<circle cx="12" cy="6" r="2.6"/><path d="M8 21v-6l-2-4 6 1 6-1-2 4v6M12 12v4"/>',
+    sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>',
     share: '<path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/>'
   };
   const svg = (n) => `<svg viewBox="0 0 24 24" aria-hidden="true">${I[n] || ''}</svg>`;
@@ -90,7 +97,10 @@
   const HARAKAT = /[\u064B-\u0652\u0670]/g;
   const ar = (s) => state.harakat ? s : String(s).replace(HARAKAT, '');
   const allDialogues = () => book.chapters.flatMap(c => c.dialogues.map(d => ({ ...d, ch: c })));
-  const findDialogue = (id) => allDialogues().find(d => d.id === id);
+  const findDialogue = (id) => {
+    for (const b of BOOKS) for (const c of b.chapters) { const d = c.dialogues.find(x => x.id === id); if (d) { setBook(b.id); return { ...d, ch: c }; } }
+    return null;
+  };
   const chapterVocab = (c) => {
     const seen = new Set(), out = [];
     c.dialogues.flatMap(d => d.vocab || []).concat(c.vocab || []).forEach(v => {
@@ -114,8 +124,10 @@
   const isFav = (a) => !!state.fav[vkey(a)];
   const starBtn = (a) => `<button class="star ${isFav(a) ? 'on' : ''}" data-fav="${esc(vkey(a))}" aria-label="В избранное">${svg('star')}</button>`;
   const vrow = (a, r) => `<tr><td class="ru"><div class="rucell">${starBtn(a)}<span>${esc(r)}</span></div></td><td class="ar">${esc(ar(a))}</td></tr>`;
+  const chOptions = (sel, extra) => BOOKS.map(b => `<optgroup label="${esc(b.title)}">${b.chapters.filter(c => chapterVocab(c).length).map(c =>
+    `<option value="${c.n}" ${String(sel) === String(c.n) ? 'selected' : ''}>Глава ${c.n}. ${esc(c.ru)}${extra ? extra(c) : ''}</option>`).join('')}</optgroup>`).join('');
   const matRow = (s) => `<button class="mat" data-p="${s.page}" data-t="${esc(s.label)}"><span>${esc(s.label)}</span><small>стр. ${s.page}</small>${svg('right')}</button>`;
-  const pageSrc = (n) => `${n}.webp`;
+  const pageSrc = (n, b) => `${(b || book).pagePrefix || ''}${n}.webp`;
   const haptic = (t = 'light') => { try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
   function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); }
 
@@ -136,7 +148,7 @@
 
   /* ---------------- router ---------------- */
   const TABS = [
-    { id: 'home', label: book.title, icon: 'home' },
+    { id: 'home', label: 'Главная', icon: 'home' },
     { id: 'dict', label: 'Словарь', icon: 'dict' },
     { id: 'cards', label: 'Практика', icon: 'cards' },
     { id: 'book', label: 'Книга', icon: 'book' },
@@ -183,12 +195,13 @@
     const ds = allDialogues();
     const done = ds.filter(d => state.done[d.id]).length;
     const pct = ds.length ? Math.round(done / ds.length * 100) : 0;
-    let html = `
+    const volSeg = BOOKS.length > 1 ? `<div class="seg vol">${BOOKS.map(b => `<button data-vol="${b.id}" class="${b === book ? 'on' : ''}">${esc(b.title)}</button>`).join('')}</div>` : '';
+    let html = volSeg + `
       <section class="intro">
         <img src="${pageSrc(book.cover)}" alt="Обложка учебника">
         <div>
           <div class="ar">${esc(book.titleAr)}</div>
-          <p>Курс арабского языка · 8 глав, ${ds.length} диалогов</p>
+          <p>Курс арабского языка · главы ${book.chapters[0].n}–${book.chapters[book.chapters.length - 1].n} · ${ds.length} текстов</p>
           <div class="progress"><i style="width:${pct}%"></i></div>
           <small>Пройдено ${done} из ${ds.length}</small>
         </div>
@@ -197,7 +210,7 @@
       const cards = ch.dialogues.map(d => {
         const first = d.lines && d.lines[0] ? `<div class="first">${esc(ar(d.lines[0][1]))}</div>` : '';
         return `<button class="dcard" data-d="${d.id}">
-          <span class="pill">${ch.n}.${d.n}. Диалог</span>
+          <span class="pill">${ch.n}.${d.n}. ${ch.n === 16 ? 'Текст' : 'Диалог'}</span>
           ${state.done[d.id] ? `<span class="done">${svg('check')}</span>` : ''}${state.favD[d.id] ? `<span class="favmark">${svg('star')}</span>` : ''}
           ${first}
           <div class="sub">${esc(d.ru || ar(d.ar))}</div>
@@ -239,6 +252,7 @@
     });
     view.onclick = e => {
       const d = e.target.closest('[data-d]'); if (d) { haptic(); location.hash = '#/d/' + d.dataset.d; return; }
+      const vb = e.target.closest('[data-vol]'); if (vb) { haptic(); setBook(vb.dataset.vol); renderHome(); window.scrollTo(0, 0); return; }
       const qz = e.target.closest('[data-quiz]'); if (qz) { haptic(); location.hash = '#/quiz/' + qz.dataset.quiz; return; }
       const m = e.target.closest('[data-mat]');
       if (m) { haptic(); const box = $('#mats-' + m.dataset.mat); box.hidden = !box.hidden; m.setAttribute('aria-expanded', String(!box.hidden)); m.classList.toggle('open', !box.hidden); return; }
@@ -251,12 +265,12 @@
   function renderDialogue(id) {
     const d = findDialogue(id);
     if (!d) { location.hash = '#/'; return; }
-    setChrome(`Глава ${d.ch.n} · Диалог ${d.n}`, 'home', true);
+    setChrome(`Глава ${d.ch.n} · ${d.ch.n === 16 ? 'Текст' : 'Диалог'} ${d.n}`, 'home', true);
     const hasText = !!(d.lines && d.lines.length);
     const tabs = [];
-    if (hasText) tabs.push(['text', 'Диалог']);
+    if (hasText) tabs.push(['text', d.ch.n === 16 ? 'Текст' : 'Диалог']);
     if (d.vocab) tabs.push(['vocab', 'Новые слова']);
-    tabs.push(['page', 'Страница книги']);
+    tabs.push(['page', d.explain && [].concat(d.explain).length > 1 ? 'Разбор в книге' : 'Страница книги']);
     let cur = tabs[0][0];
 
     const draw = () => {
@@ -265,15 +279,16 @@
         const order = [];
         d.lines.forEach(l => { if (l[0] && !order.includes(l[0])) order.push(l[0]); });
         body = `<div class="lines">${d.lines.map(l => {
-          const s = l[2] || (Math.min(order.indexOf(l[0]), 2) + 1);
+          const c = l[2] || (Math.min(order.indexOf(l[0]), 2) + 1);
+          const cls = c === 4 ? 'ayah' : c === 5 ? 's1 cont' : c === 6 ? 's2 cont' : 's' + c + (l[0] ? '' : ' quote');
           const sp = l[0] ? `<span class="sp">${esc(ar(l[0]))}:</span> ` : '';
-          return `<div class="line s${s}${l[0] ? '' : ' quote'}">${sp}${esc(ar(l[1]))}</div>`;
+          return `<div class="line ${cls}">${sp}${esc(ar(l[1]))}</div>`;
         }).join('')}</div>`;
       } else if (cur === 'vocab') {
         body = `<table class="vocab"><thead><tr><th>Значение</th><th class="ar">الكَلِمة الجَدِيدة</th></tr></thead><tbody>${
           d.vocab.map(v => vrow(v[0], v[1])).join('')}</tbody></table>`;
       } else {
-        const pages = [d.page].concat(d.explain ? [d.explain] : []);
+        const pages = [d.page].concat(d.explain ? [].concat(d.explain) : []);
         body = pages.map(p => `<img class="page-img" loading="lazy" src="${pageSrc(p)}" alt="Страница ${p} учебника">`).join('');
       }
       const isDone = !!state.done[d.id];
@@ -314,11 +329,12 @@
 
   /* ---------------- whole book reader ---------------- */
   function renderBook(n) {
-    const total = 154;
+    const total = book.pages || 154;
     n = Math.max(1, Math.min(total, n));
-    setChrome('Книга', 'book', false);
-    const toc = [['Предисловие', book.intro[0]]].concat(book.chapters.map(c => [c, c.page])).concat([['Словарь', book.dictPages[0]], ['Приложения: числа, дни, цвета, месяцы', book.appendixPages[0]]]);
-    view.innerHTML = `
+    setChrome('Книга · ' + book.title, 'book', false);
+    const toc = (book.toc || []).slice(0, book.id === 'vol1' ? 1 : 0).concat(book.chapters.map(c => [c, c.page])).concat((book.toc || []).slice(book.id === 'vol1' ? 1 : 0));
+    const volSeg = BOOKS.length > 1 ? `<div class="seg vol">${BOOKS.map(b => `<button data-vol="${b.id}" class="${b === book ? 'on' : ''}">${esc(b.title)}</button>`).join('')}</div>` : '';
+    view.innerHTML = volSeg + `
       <div class="pager">
         <button id="prev" ${n <= 1 ? 'disabled' : ''} aria-label="Предыдущая страница">${svg('left')}</button>
         <div class="num">Стр. <input id="pnum" type="number" inputmode="numeric" min="1" max="${total}" value="${n}"> из ${total}</div>
@@ -331,6 +347,7 @@
         : `<button data-go="${p}"><span>${esc(t)}</span><small>${p}</small></button>`).join('')}</div>`;
     const go = (k) => { haptic(); history.replaceState(null, '', '#/book/' + k); renderBook(k); };
     view.onclick = e => {
+      const vb = e.target.closest('[data-vol]'); if (vb) { haptic(); setBook(vb.dataset.vol); history.replaceState(null, '', '#/book/1'); renderBook(1); return; }
       if (e.target.closest('#prev')) return go(n - 1);
       if (e.target.closest('#next')) return go(n + 1);
       const g = e.target.closest('[data-go]'); if (g) { go(Number(g.dataset.go)); window.scrollTo(0, 0); }
@@ -345,7 +362,7 @@
 
   /* ---------------- chapter words ---------------- */
   function renderWords(n) {
-    const ch = book.chapters.find(c => c.n === n); if (!ch) { location.hash = '#/'; return; }
+    const fc = findChapter(n); if (!fc) { location.hash = '#/'; return; } setBook(fc.b.id); const ch = fc.c;
     setChrome(`Глава ${n} · Слова`, 'home', true);
     const list = chapterVocab(ch);
     view.innerHTML = `<div class="dhead"><span class="ar">${esc(ar(ch.ar))}</span><span class="ru">${esc(ch.ru)} · ${list.length} слов</span></div>
@@ -364,7 +381,7 @@
   function renderDict(q = '') {
     setChrome('Словарь', 'dict', false);
     const norm = s => String(s).toLowerCase().replace(HARAKAT, '').replace(/\u0640/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/ё/g, 'е');
-    const words = allVocab();
+    const words = BOOKS.flatMap(b => b.chapters.flatMap(chapterVocab));
     const draw = (q) => {
       const nq = norm(q.trim());
       const list = nq ? words.filter(w => norm(w.ar).includes(nq) || norm(w.ru).includes(nq)) : words;
@@ -376,17 +393,18 @@
       <input class="search" id="dq" type="search" placeholder="Поиск по-русски или по-арабски" value="${esc(q)}">
       <div id="dres"></div>
       <div class="h2">Словарь из учебника</div>
-      <div class="toc">${book.chapters.map(c => `<button data-go="${c.dictPage}"><span>Глава ${c.n}. ${esc(c.ru)}</span><small>${svg('page')}</small></button>`).join('')}</div>`;
+      ${BOOKS.map(b => `<div class="h2 sub">${esc(b.title)}</div><div class="toc">${b.chapters.map(c => `<button data-go="${c.dictPage}" data-gb="${b.id}"><span>Глава ${c.n}. ${esc(c.ru)}</span><small>${svg('page')}</small></button>`).join('')}</div>`).join('')}`;
     draw(q);
     $('#dq').addEventListener('input', e => draw(e.target.value));
-    view.onclick = e => { const g = e.target.closest('[data-go]'); if (g) location.hash = '#/book/' + g.dataset.go; };
+    view.onclick = e => { const g = e.target.closest('[data-go]'); if (g) { setBook(g.dataset.gb); location.hash = '#/book/' + g.dataset.go; } };
   }
 
   /* ---------------- flashcards ---------------- */
   function renderCards() {
     setChrome('Практика', 'cards', false);
     const chs = book.chapters.filter(c => chapterVocab(c).length);
-    const pool = allVocab().filter(v => state.fcChapter === 'all' || String(v.ch) === String(state.fcChapter));
+    const fcc = state.fcChapter !== 'all' && findChapter(state.fcChapter);
+    const pool = fcc ? chapterVocab(fcc.c) : allVocab();
     const st = (v) => state.cards[vkey(v.ar)];
     let counts;
     const recount = () => { counts = { fav: pool.filter(v => isFav(v.ar)).length, new: pool.filter(v => st(v) !== 'known').length, hard: pool.filter(v => st(v) === 'hard').length, all: pool.length, known: pool.filter(v => st(v) === 'known').length }; };
@@ -398,8 +416,8 @@
     const head = () => `
       <div class="seg top"><button class="on">Карточки</button><button id="toQuiz">Тест</button></div>
       <select class="select" id="fch">
-        <option value="all">Все главы</option>
-        ${chs.map(c => `<option value="${c.n}" ${String(state.fcChapter) === String(c.n) ? 'selected' : ''}>Глава ${c.n}. ${esc(c.ru)}</option>`).join('')}
+        <option value="all" ${state.fcChapter === 'all' ? 'selected' : ''}>Все главы · ${esc(book.title)}</option>
+        ${chOptions(state.fcChapter)}
       </select>
       <div class="seg">
         <button data-mode="new" class="${mode === 'new' ? 'on' : ''}">Не выучено · ${counts.new}</button>
@@ -447,7 +465,8 @@
   function renderQuiz(scope) {
     setChrome('Практика', 'cards', false);
     const chs = book.chapters.filter(c => chapterVocab(c).length);
-    const pool = scope === 'all' ? allVocab() : chapterVocab(book.chapters.find(c => String(c.n) === String(scope)) || chs[0]);
+    const qfc = scope !== 'all' && findChapter(scope); if (qfc) setBook(qfc.b.id);
+    const pool = qfc ? chapterVocab(qfc.c) : allVocab();
     const dir = state.qDir || 'ar';
     const shuffle = (a) => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
     const uniq = (arr, f) => { const s = new Set(); return arr.filter(x => { const k = f(x); if (s.has(k)) return false; s.add(k); return true; }); };
@@ -462,8 +481,8 @@
     const head = () => `
       <div class="seg top"><button id="toCards">Карточки</button><button class="on">Тест</button></div>
       <select class="select" id="qch">
-        <option value="all" ${scope === 'all' ? 'selected' : ''}>Все главы</option>
-        ${chs.map(c => `<option value="${c.n}" ${String(scope) === String(c.n) ? 'selected' : ''}>Глава ${c.n}. ${esc(c.ru)}${state.quiz[c.n] != null ? ` · лучший ${state.quiz[c.n]}%` : ''}</option>`).join('')}
+        <option value="all" ${scope === 'all' ? 'selected' : ''}>Все главы · ${esc(book.title)}</option>
+        ${chOptions(scope, c => state.quiz[c.n] != null ? ` · лучший ${state.quiz[c.n]}%` : '')}
       </select>
       <div class="seg"><button data-dir="ar" class="${dir === 'ar' ? 'on' : ''}">Арабский → русский</button><button data-dir="ru" class="${dir === 'ru' ? 'on' : ''}">Русский → арабский</button></div>`;
     const bind = () => {
@@ -518,16 +537,17 @@
     const dDone = (c) => (c ? c.dialogues : ds).filter(d => state.done[d.id]).length;
     const pctOf = (c) => { const dl = c ? c.dialogues.length : ds.length, wl = c ? chapterVocab(c).length : words.length;
       return Math.round(((dl ? dDone(c) / dl : 0) + (wl ? known(c) / wl : 0)) / 2 * 100); };
-    const qv = Object.values(state.quiz || {}); const qAvg = qv.length ? Math.round(qv.reduce((a, b) => a + b, 0) / qv.length) : null;
+    const qv = book.chapters.map(c => state.quiz[c.n]).filter(v => v != null); const qAvg = qv.length ? Math.round(qv.reduce((a, b) => a + b, 0) / qv.length) : null;
     const favDs = ds.filter(d => state.favD[d.id]);
     const total = pctOf(null), sk = streak();
-    const progressHtml = `
+    const volSegP = BOOKS.length > 1 ? `<div class="seg vol">${BOOKS.map(b => `<button data-vol="${b.id}" class="${b === book ? 'on' : ''}">${esc(b.title)}</button>`).join('')}</div>` : '';
+    const progressHtml = volSegP + `
       <section class="pcard">
-        <div class="ptop"><span>Общий прогресс по тому 1</span><b>${total}%</b></div>
+        <div class="ptop"><span>Общий прогресс · ${esc(book.title)}</span><b>${total}%</b></div>
         <div class="progress"><i style="width:${total}%"></i></div>
       </section>
       <div class="stats">
-        <div><b>${dDone(null)}<small>/${ds.length}</small></b><span>диалогов пройдено</span></div>
+        <div><b>${dDone(null)}<small>/${ds.length}</small></b><span>текстов пройдено</span></div>
         <div><b>${known(null)}<small>/${words.length}</small></b><span>слов выучено</span></div>
         <div><b>${qAvg != null ? qAvg + '%' : '—'}</b><span>средний тест</span></div>
         <div class="streak"><b>${svg('flame')}${sk}</b><span>${sk % 10 === 1 && sk % 100 !== 11 ? 'день' : (sk % 10 >= 2 && sk % 10 <= 4 && (sk % 100 < 10 || sk % 100 >= 20)) ? 'дня' : 'дней'} подряд</span></div>
@@ -551,7 +571,7 @@
       </div>
       <div class="about">
         <img src="assets/logo-navy.png" alt="" onerror="this.remove()"><br>
-        Учебник «Хуна Аль-Арабия», том 1<br>Академия арабского языка HUNA ARABIC<br>
+        Учебник «Хуна Аль-Арабия», тома 1–2<br>Академия арабского языка HUNA ARABIC<br>
         <a class="link" href="https://t.me/huna_arabic" id="tgLink">Telegram-канал академии</a>
       </div>`;
     if (document.documentElement.getAttribute('data-theme') === 'dark' || (state.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -561,6 +581,7 @@
       const b = e.target.closest('[data-k]');
       if (b) { haptic(); const k = b.dataset.k; state[k] = k === 'scale' ? Number(b.dataset.v) : b.dataset.v; save(); applyTheme(); renderSettings(); return; }
       if (e.target.closest('#hk')) { haptic(); state.harakat = !state.harakat; save(); renderSettings(); return; }
+      const vb = e.target.closest('[data-vol]'); if (vb) { haptic(); setBook(vb.dataset.vol); renderSettings(); return; }
       const cw = e.target.closest('[data-cw]'); if (cw) { haptic(); location.hash = '#/w/' + cw.dataset.cw; return; }
       const dd = e.target.closest('[data-d]'); if (dd) { haptic(); location.hash = '#/d/' + dd.dataset.d; return; }
       if (e.target.closest('#resetCards')) {
@@ -615,5 +636,5 @@
     } catch (e) {}
   }
   window.addEventListener('hashchange', route);
-  loadCloud(() => { markActive(); applyTheme(); route(); });
+  loadCloud(() => { if (state.vol) { const b = BOOKS.find(x => x.id === state.vol); if (b) book = b; } markActive(); applyTheme(); route(); });
 })();
