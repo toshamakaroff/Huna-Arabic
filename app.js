@@ -205,10 +205,11 @@
       let body = '';
       if (cur === 'text') {
         const order = [];
-        d.lines.forEach(l => { if (!order.includes(l[0])) order.push(l[0]); });
+        d.lines.forEach(l => { if (l[0] && !order.includes(l[0])) order.push(l[0]); });
         body = `<div class="lines">${d.lines.map(l => {
-          const s = Math.min(order.indexOf(l[0]), 2) + 1;
-          return `<div class="line s${s}"><span class="sp">${esc(ar(l[0]))}:</span> ${esc(ar(l[1]))}</div>`;
+          const s = l[2] || (Math.min(order.indexOf(l[0]), 2) + 1);
+          const sp = l[0] ? `<span class="sp">${esc(ar(l[0]))}:</span> ` : '';
+          return `<div class="line s${s}${l[0] ? '' : ' quote'}">${sp}${esc(ar(l[1]))}</div>`;
         }).join('')}</div>`;
       } else if (cur === 'vocab') {
         body = `<table class="vocab"><thead><tr><th>Значение</th><th class="ar">الكَلِمة الجَدِيدة</th></tr></thead><tbody>${

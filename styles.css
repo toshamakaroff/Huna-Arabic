@@ -208,3 +208,4 @@ a.link { color: var(--speaker-2); font-weight: 700; text-decoration: none; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 .chip-words { background: var(--teal); color: #fff; border-color: var(--teal); }
+.line.quote { padding-right: 12px; border-right: 3px solid var(--speaker-3); font-weight: 600; }
