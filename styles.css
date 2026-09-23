@@ -207,3 +207,4 @@ a.link { color: var(--speaker-2); font-weight: 700; text-decoration: none; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+.chip-words { background: var(--teal); color: #fff; border-color: var(--teal); }

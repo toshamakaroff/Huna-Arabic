@@ -55,7 +55,15 @@
   const ar = (s) => state.harakat ? s : String(s).replace(HARAKAT, '');
   const allDialogues = () => book.chapters.flatMap(c => c.dialogues.map(d => ({ ...d, ch: c })));
   const findDialogue = (id) => allDialogues().find(d => d.id === id);
-  const allVocab = () => book.chapters.flatMap(c => c.dialogues.flatMap(d => (d.vocab || []).map(v => ({ ar: v[0], ru: v[1], ch: c.n, d: d.id }))));
+  const chapterVocab = (c) => {
+    const seen = new Set(), out = [];
+    c.dialogues.flatMap(d => d.vocab || []).concat(c.vocab || []).forEach(v => {
+      const k = v[0].replace(/[\u064B-\u0652\u0670\s]/g, '');
+      if (!seen.has(k)) { seen.add(k); out.push({ ar: v[0], ru: v[1], ch: c.n }); }
+    });
+    return out;
+  };
+  const allVocab = () => book.chapters.flatMap(chapterVocab);
   const pageSrc = (n) => `${n}.webp`;
   const haptic = (t = 'light') => { try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
   function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); }
@@ -108,6 +116,7 @@
     window.scrollTo(0, 0);
     if (name === 'd' && arg) return renderDialogue(decodeURIComponent(arg));
     if (name === 'p' && arg) return renderPages(arg.split(',').map(Number), decodeURIComponent(h.split('/')[2] || ''));
+    if (name === 'w' && arg) return renderWords(Number(arg));
     if (name === 'dict') return renderDict();
     if (name === 'cards') return renderCards();
     if (name === 'book') return renderBook(Number(arg) || 1);
@@ -146,6 +155,8 @@
       ch.sections.forEach(s => { tot[s.ru] = (tot[s.ru] || 0) + 1; });
       const chips = ch.sections.map(s => { cnt[s.ru] = (cnt[s.ru] || 0) + 1; const t = tot[s.ru] > 1 ? `${s.ru} ${cnt[s.ru]}` : s.ru;
         return `<button class="chip" data-p="${s.page}" data-t="${esc(t)}">${esc(t)}</button>`; }).join('');
+      const nW = chapterVocab(ch).length;
+      const wordsChip = nW ? `<button class="chip chip-words" data-w="${ch.n}">Слова главы · ${nW}</button>` : '';
       return `<article class="chapter">
         <div class="ch-head">
           <div class="hex">${ch.n}</div>
@@ -158,7 +169,7 @@
           <button class="arrow r" aria-label="Следующий диалог" ${ch.dialogues.length < 2 ? 'disabled' : ''}>${svg('right')}</button>
           <div class="dots">${dots}</div>
         </div>
-        <div class="chips">${chips}</div>
+        <div class="chips">${wordsChip}${chips}</div>
       </article>`;
     }).join('');
     view.innerHTML = html;
@@ -173,6 +184,7 @@
     });
     view.onclick = e => {
       const d = e.target.closest('[data-d]'); if (d) { haptic(); location.hash = '#/d/' + d.dataset.d; return; }
+      const w = e.target.closest('[data-w]'); if (w) { haptic(); location.hash = '#/w/' + w.dataset.w; return; }
       const p = e.target.closest('[data-p]'); if (p) { haptic(); location.hash = `#/p/${p.dataset.p}/${encodeURIComponent(p.dataset.t)}`; }
     };
   }
@@ -267,6 +279,21 @@
     if (n < total) { const pre = new Image(); pre.src = pageSrc(n + 1); }
   }
 
+  /* ---------------- chapter words ---------------- */
+  function renderWords(n) {
+    const ch = book.chapters.find(c => c.n === n); if (!ch) { location.hash = '#/'; return; }
+    setChrome(`Глава ${n} · Слова`, 'home', true);
+    const list = chapterVocab(ch);
+    view.innerHTML = `<div class="dhead"><span class="ar">${esc(ar(ch.ar))}</span><span class="ru">${esc(ch.ru)} · ${list.length} слов</span></div>
+      <table class="vocab"><thead><tr><th>Значение</th><th class="ar">الكَلِمة الجَدِيدة</th></tr></thead><tbody>${
+      list.map(v => `<tr><td class="ru">${esc(v.ru)}</td><td class="ar">${esc(ar(v.ar))}</td></tr>`).join('')}</tbody></table>
+      <div class="row2"><button class="btn" id="learn">${svg('cards')}Учить карточками</button><button class="btn ghost" id="src">${svg('page')}В книге</button></div>`;
+    view.onclick = e => {
+      if (e.target.closest('#learn')) { state.fcChapter = String(n); save(); location.hash = '#/cards'; }
+      if (e.target.closest('#src')) location.hash = '#/book/' + ch.dictPage;
+    };
+  }
+
   /* ---------------- dictionary ---------------- */
   function renderDict(q = '') {
     setChrome('Словарь', 'dict', false);
@@ -292,7 +319,7 @@
   /* ---------------- flashcards ---------------- */
   function renderCards() {
     setChrome('Карточки', 'cards', false);
-    const chs = book.chapters.filter(c => c.dialogues.some(d => d.vocab));
+    const chs = book.chapters.filter(c => chapterVocab(c).length);
     let deck = allVocab().filter(v => state.fcChapter === 'all' || String(v.ch) === String(state.fcChapter));
     deck = deck.sort(() => Math.random() - .5);
     let i = 0, known = 0;
