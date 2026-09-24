@@ -2,8 +2,12 @@
 // Нужны переменные окружения в Vercel: BOT_TOKEN и WEBHOOK_SECRET.
 
 const APP_URL = 'https://huna-arabic.vercel.app/';
-const WELCOME_IMG = 'https://huna-arabic.vercel.app/assets/welcome.png';
+// Чтобы сменить картинку: замени assets/welcome.png в репозитории и увеличь число после ?v=
+// (Telegram запоминает картинку по ссылке, без нового числа покажет старую).
+const WELCOME_IMG = 'https://huna-arabic.vercel.app/assets/welcome.png?v=2';
 const CHANNEL_URL = 'https://t.me/huna_arabic';
+const YOUTUBE_URL = 'https://www.youtube.com/@Huna_Arabic';
+const AUTHOR_URL = 'https://t.me/huna_islam';
 
 async function tg(method, body) {
   const r = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/${method}`, {
@@ -29,10 +33,15 @@ function welcomeText(name) {
     '',
     'Добро пожаловать в интерактивный учебник арабского языка <b>«Хуна Аль-Арабия»</b> от академии HUNA ARABIC.',
     '',
-    '📖 27 диалогов с огласовками',
-    '🗂 343 слова с переводом',
-    '🃏 Карточки и тесты по каждой главе',
+    '📚 2 тома, 16 глав',
+    '📖 51 диалог с огласовками',
+    '🎧 Аудио ко всем диалогам',
+    '🗂 726 слов с переводом',
+    '🧠 Карточки и тесты по каждой главе',
     '📊 Прогресс и серия дней',
+    '',
+    `▶️ <a href="${YOUTUBE_URL}">YouTube-канал академии</a>`,
+    `✍️ <a href="${AUTHOR_URL}">Канал автора — Ислам ибн Тимур</a>`,
     '',
     'Нажмите кнопку ниже, чтобы начать 👇'
   ].join('\n');
