@@ -4,7 +4,7 @@
 const APP_URL = 'https://huna-arabic.vercel.app/';
 // Чтобы сменить картинку: замени assets/welcome.png в репозитории и увеличь число после ?v=
 // (Telegram запоминает картинку по ссылке, без нового числа покажет старую).
-const WELCOME_IMG = 'https://huna-arabic.vercel.app/assets/welcome.png?v=2';
+const WELCOME_IMG = 'https://huna-arabic.vercel.app/assets/welcome.png?v=3';
 const CHANNEL_URL = 'https://t.me/huna_arabic';
 const YOUTUBE_URL = 'https://www.youtube.com/@Huna_Arabic';
 const AUTHOR_URL = 'https://t.me/huna_islam';
