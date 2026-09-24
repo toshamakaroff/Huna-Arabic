@@ -670,7 +670,11 @@
       <div class="about">
         <img src="assets/logo-navy.png" alt="" onerror="this.remove()"><br>
         Учебник «Хуна Аль-Арабия», тома 1–2<br>Академия арабского языка HUNA ARABIC<br>
-        <a class="link" href="https://t.me/huna_arabic" id="tgLink">Telegram-канал академии</a>
+        <div class="about-links">
+          <a class="link" href="https://t.me/huna_arabic" target="_blank" rel="noopener" data-ext>Telegram-канал академии</a>
+          <a class="link" href="https://www.youtube.com/@Huna_Arabic" target="_blank" rel="noopener" data-ext>YouTube-канал академии</a>
+          <a class="link" href="https://t.me/huna_islam" target="_blank" rel="noopener" data-ext>Канал автора — Ислам ибн Тимур</a>
+        </div>
       </div>`;
     if (document.documentElement.getAttribute('data-theme') === 'dark' || (state.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)) {
       const im = $('.about img'); if (im) im.src = 'assets/logo-white.png';
@@ -694,11 +698,17 @@
         else if (confirm('Сбросить все отметки о пройденных диалогах?')) doReset();
         return;
       }
-      if (e.target.closest('#tgLink') && tg && tg.openTelegramLink) { e.preventDefault(); tg.openTelegramLink('https://t.me/huna_arabic'); }
+      const ext = e.target.closest('[data-ext]');
+      if (ext && tg) {
+        const url = ext.href;
+        if (/^https:\/\/t\.me\//.test(url) && tg.openTelegramLink) { e.preventDefault(); tg.openTelegramLink(url); }
+        else if (tg.openLink) { e.preventDefault(); tg.openLink(url); }
+      }
     };
   }
 
   /* ---------------- share ---------------- */
+  $('#logo').addEventListener('click', () => { haptic(); if (location.hash && location.hash !== '#/') location.hash = '#/'; else window.scrollTo({ top: 0, behavior: 'smooth' }); });
   $('#shareBtn').addEventListener('click', () => {
     haptic();
     const text = 'Учебник арабского языка «Хуна Аль-Арабия» — диалоги, словарь и карточки';

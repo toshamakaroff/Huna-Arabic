@@ -329,3 +329,8 @@ a.link { color: var(--speaker-2); font-weight: 700; text-decoration: none; }
 #aSeek::-moz-range-track { height: 5px; border-radius: 3px; background: linear-gradient(to right, var(--teal) var(--p, 0%), var(--line) var(--p, 0%)); }
 #aSeek::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5.5px; border-radius: 50%; background: var(--teal); border: 2px solid var(--surface); }
 #aSeek::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--teal); border: 2px solid var(--surface); }
+
+/* logo → home, about links */
+#logo { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#logo:active { opacity: .7; }
+.about-links { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
