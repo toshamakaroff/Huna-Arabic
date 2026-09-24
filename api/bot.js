@@ -23,6 +23,8 @@ const esc = (s) => String(s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': 
 const keyboard = {
   inline_keyboard: [
     [{ text: '📖 Открыть учебник', web_app: { url: APP_URL } }],
+    [{ text: '▶️ YouTube-канал академии', url: YOUTUBE_URL }],
+    [{ text: '✍️ Канал автора — Ислам ибн Тимур', url: AUTHOR_URL }],
     [{ text: '📢 Канал академии', url: CHANNEL_URL }]
   ]
 };
@@ -39,9 +41,6 @@ function welcomeText(name) {
     '🗂 726 слов с переводом',
     '🧠 Карточки и тесты по каждой главе',
     '📊 Прогресс и серия дней',
-    '',
-    `▶️ <a href="${YOUTUBE_URL}">YouTube-канал академии</a>`,
-    `✍️ <a href="${AUTHOR_URL}">Канал автора — Ислам ибн Тимур</a>`,
     '',
     'Нажмите кнопку ниже, чтобы начать 👇'
   ].join('\n');
